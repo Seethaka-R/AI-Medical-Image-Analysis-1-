@@ -200,7 +200,7 @@ Add your screenshots to `docs/screenshots/` and keep the names below for automat
 
 ### Training Dashboard
 
-![Training Dashboard](docs/screenshots/training-dashboard.png)
+![Training Dashboard](outputs/prj_trained_result.png)
 
 ### Prediction Page
 

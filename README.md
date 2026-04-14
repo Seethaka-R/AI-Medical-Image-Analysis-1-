@@ -210,8 +210,9 @@ Add your screenshots to `docs/screenshots/` and keep the names below for automat
 
 ### Evaluation Plots
 
-![Evaluation Plots](docs/screenshots/evaluation-plots.png)
-
+![Evaluation Plots](outputs/confusion_matrix.png)
+![Evaluation Plots](outputs/roc_curves.png)
+![Evaluation Plots](outputs/training_curves.png)
 ## Generated Output Files
 
 After training and prediction, the project generates:

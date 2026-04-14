@@ -1,0 +1,12 @@
+{
+  "accuracy": 89.26,
+  "macro_f1": 88.1,
+  "weighted_recall": 89.26,
+  "per_class": {
+    "NORMAL": 84.38,
+    "PNEUMONIA": 91.82
+  },
+  "sensitivity": 96.41,
+  "specificity": 77.35,
+  "roc_auc": 96.48
+}

@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Pneumonia X-Ray Analysis — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --b900:#1E3A8A;--b800:#1E40AF;--b700:#1D4ED8;--b600:#2563EB;
+  --b500:#3B82F6;--b400:#60A5FA;--b300:#93C5FD;--b200:#BFDBFE;
+  --b100:#DBEAFE;--b50:#EFF6FF;
+  --w:#FFFFFF;
+  --g50:#F8FAFC;--g100:#F1F5F9;--g200:#E2E8F0;--g300:#CBD5E1;
+  --g400:#94A3B8;--g500:#64748B;--g700:#334155;--g900:#0F172A;
+  --green:#059669;--red:#DC2626;--amber:#D97706;--purple:#7C3AED;
+  --sh0:0 1px 3px rgba(30,64,175,.07);
+  --sh1:0 4px 16px rgba(30,64,175,.10);
+  --sh2:0 12px 32px rgba(30,64,175,.14);
+  --r:12px;--rl:18px;
+  --fh:'Space Grotesk',sans-serif;--fb:'DM Sans',sans-serif;
+}
+html,body{height:100%;background:var(--g50);font-family:var(--fb);color:var(--g900);font-size:15px;line-height:1.6}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:var(--b300);border-radius:99px}
+
+/* ── Shell ──────────────────────────────────────────────────── */
+.shell{display:grid;grid-template-columns:252px 1fr;grid-template-rows:62px 1fr;min-height:100vh}
+
+/* ── Topbar ─────────────────────────────────────────────────── */
+.top{
+  grid-column:1/-1;background:var(--w);border-bottom:1.5px solid var(--b100);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 26px;position:sticky;top:0;z-index:100;box-shadow:var(--sh0);
+}
+.brand{display:flex;align-items:center;gap:12px}
+.bico{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--b700),var(--b400));display:flex;align-items:center;justify-content:center}
+.bico svg{width:18px;height:18px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bname{font-family:var(--fh);font-size:16px;font-weight:700;color:var(--b800);letter-spacing:-.3px}
+.bsub{font-size:10px;color:var(--g400);letter-spacing:.8px;text-transform:uppercase}
+.spill{display:flex;align-items:center;gap:8px;padding:5px 14px;border-radius:99px;font-size:12px;font-weight:500;background:var(--b50);color:var(--b700);border:1.5px solid var(--b200)}
+.sdot{width:8px;height:8px;border-radius:50%;background:var(--g300);transition:background .3s}
+.sdot.ready{background:var(--green);box-shadow:0 0 0 3px rgba(5,150,105,.18)}
+.sdot.training{background:var(--amber);animation:pa 1.2s ease-in-out infinite}
+@keyframes pa{0%,100%{box-shadow:0 0 0 0 rgba(217,119,6,.4)}50%{box-shadow:0 0 0 6px rgba(217,119,6,0)}}
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+.side{background:var(--w);border-right:1.5px solid var(--b100);padding:18px 12px;display:flex;flex-direction:column;gap:3px;overflow-y:auto}
+.nlbl{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--g400);padding:12px 10px 4px}
+.ni{display:flex;align-items:center;gap:9px;padding:9px 13px;border-radius:var(--r);cursor:pointer;transition:all .18s;font-size:13px;font-weight:500;color:var(--g500);border:none;background:none;width:100%;text-align:left}
+.ni svg{width:15px;height:15px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.ni:hover{background:var(--b50);color:var(--b700)}
+.ni.active{background:var(--b700);color:#fff;box-shadow:0 4px 12px rgba(29,78,216,.25)}
+.dataset-status{margin-top:4px;padding:10px 12px;border-radius:var(--r);background:var(--g50);border:1.5px solid var(--g200)}
+.ds-title{font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--g400);margin-bottom:8px}
+.ds-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--g500);margin-bottom:3px}
+.ds-badge{padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600}
+.ds-found{background:#DCFCE7;color:#166534}
+.ds-missing{background:#FEE2E2;color:#991B1B}
+
+/* ── Main ────────────────────────────────────────────────────── */
+.main{padding:22px;overflow-y:auto;display:flex;flex-direction:column;gap:18px}
+.page{display:none;flex-direction:column;gap:18px;animation:fi .3s ease}
+.page.active{display:flex}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.ph{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.ptitle{font-family:var(--fh);font-size:20px;font-weight:700;color:var(--b900);letter-spacing:-.3px}
+.pdesc{font-size:12px;color:var(--g400);margin-top:2px}
+
+/* ── Cards ───────────────────────────────────────────────────── */
+.card{background:var(--w);border-radius:var(--rl);border:1.5px solid var(--b100);box-shadow:var(--sh0);padding:20px 22px}
+.ctitle{font-family:var(--fh);font-size:13px;font-weight:600;color:var(--b800);margin-bottom:13px;display:flex;align-items:center;gap:7px}
+.ctitle svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── KPI grid ────────────────────────────────────────────────── */
+.kg{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
+.kc{background:var(--w);border:1.5px solid var(--b100);border-radius:var(--r);padding:15px 17px;box-shadow:var(--sh0);transition:transform .2s,box-shadow .2s}
+.kc:hover{transform:translateY(-2px);box-shadow:var(--sh1)}
+.kl{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--g400)}
+.kv{font-family:var(--fh);font-size:24px;font-weight:700;color:var(--b700);line-height:1.1;margin:4px 0}
+.ks{font-size:10px;color:var(--g400)}
+.bdg{display:inline-flex;align-items:center;padding:2px 9px;border-radius:99px;font-size:10px;font-weight:600;margin-top:3px;width:fit-content}
+.bg{background:#DCFCE7;color:#166534}
+.bb{background:var(--b50);color:var(--b700)}
+.ba{background:#FEF3C7;color:#92400E}
+.br{background:#FEE2E2;color:#991B1B}
+
+/* ── Grid layouts ────────────────────────────────────────────── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:7px;padding:9px 18px;border-radius:var(--r);font-family:var(--fb);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:all .18s;white-space:nowrap}
+.btn svg{width:14px;height:14px;flex-shrink:0;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.bp{background:var(--b700);color:#fff;box-shadow:0 4px 10px rgba(29,78,216,.22)}
+.bp:hover{background:var(--b800);transform:translateY(-1px)}
+.bp:disabled{background:var(--g300);box-shadow:none;cursor:not-allowed;transform:none}
+.bo{background:var(--w);color:var(--b700);border:1.5px solid var(--b300)}
+.bo:hover{background:var(--b50)}
+.bsm{padding:6px 13px;font-size:12px}
+
+/* ── Form ────────────────────────────────────────────────────── */
+.fg{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}
+.fl{font-size:11.5px;font-weight:600;color:var(--g700);letter-spacing:.2px}
+.fi{padding:8px 11px;border-radius:8px;border:1.5px solid var(--g200);font-family:var(--fb);font-size:13px;outline:none;transition:border-color .18s,box-shadow .18s;width:100%}
+.fi:focus{border-color:var(--b400);box-shadow:0 0 0 3px rgba(96,165,250,.14)}
+.fh{font-size:10.5px;color:var(--g400)}
+.fr{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+
+/* ── Upload ──────────────────────────────────────────────────── */
+.upz{border:2px dashed var(--b300);border-radius:var(--rl);padding:34px 22px;text-align:center;cursor:pointer;transition:all .2s;background:var(--b50);position:relative}
+.upz:hover,.upz.drag{border-color:var(--b600);background:var(--b100)}
+.upz input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+.upico{width:46px;height:46px;margin:0 auto 10px;background:var(--w);border-radius:12px;box-shadow:var(--sh1);display:flex;align-items:center;justify-content:center}
+.upico svg{width:22px;height:22px;stroke:var(--b600);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.upt{font-family:var(--fh);font-size:14px;font-weight:600;color:var(--b800);margin-bottom:3px}
+.ups{font-size:11px;color:var(--g400)}
+
+/* ── Progress ────────────────────────────────────────────────── */
+.pw{height:7px;border-radius:99px;background:var(--g100);overflow:hidden;margin:7px 0}
+.pf{height:100%;border-radius:99px;background:linear-gradient(90deg,var(--b700),var(--b400));transition:width .5s ease;width:0%}
+
+/* ── Table ───────────────────────────────────────────────────── */
+.tw{overflow-x:auto;border-radius:var(--r);border:1.5px solid var(--b100)}
+table{width:100%;border-collapse:collapse}
+th{background:var(--b50);color:var(--b800);font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;padding:8px 12px;text-align:left;border-bottom:1.5px solid var(--b100)}
+td{padding:8px 12px;font-size:12px;border-bottom:1px solid var(--g100);color:var(--g700)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--b50)}
+
+/* ── Result panel ────────────────────────────────────────────── */
+.rp{display:none;background:var(--w);border-radius:var(--rl);border:2px solid var(--b200);box-shadow:var(--sh1);padding:20px;gap:20px}
+.rp.show{display:flex;flex-wrap:wrap}
+.rimgs{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1;min-width:240px}
+.rbox{border-radius:var(--r);overflow:hidden;border:1.5px solid var(--b100)}
+.rbox img{width:100%;display:block;object-fit:contain;max-height:210px;background:var(--g50)}
+.rlbl{padding:5px 9px;font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--g400);background:var(--g50);border-top:1px solid var(--g100)}
+.rinfo{flex:1;min-width:220px;display:flex;flex-direction:column;gap:11px}
+.rcls{font-family:var(--fh);font-size:22px;font-weight:700}
+.rcls.normal{color:var(--green)}
+.rcls.pneumonia{color:var(--red)}
+.cbar{height:8px;border-radius:99px;background:var(--g100);overflow:hidden}
+.cfill{height:100%;border-radius:99px;transition:width .8s ease}
+.prow{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--g600);margin-bottom:4px}
+.pt{height:5px;border-radius:99px;background:var(--g100);flex:1;margin:0 9px;overflow:hidden}
+.ptf{height:100%;border-radius:99px;transition:width .7s ease}
+.risk{display:flex;align-items:center;gap:8px;padding:9px 13px;border-radius:var(--r);font-weight:500;font-size:12.5px}
+.risk-Low{background:#DCFCE7;color:#166534;border:1.5px solid #BBF7D0}
+.risk-Moderate{background:#FEF3C7;color:#92400E;border:1.5px solid #FDE68A}
+.risk-High{background:#FEE2E2;color:#991B1B;border:1.5px solid #FECACA}
+.findings-list{list-style:none;padding:0;display:flex;flex-direction:column;gap:4px}
+.findings-list li{font-size:11.5px;color:var(--g500);padding:4px 0;border-bottom:1px solid var(--g100);display:flex;align-items:flex-start;gap:7px}
+.findings-list li::before{content:"▸";color:var(--b400);flex-shrink:0;font-size:10px;margin-top:2px}
+
+/* ── Log ─────────────────────────────────────────────────────── */
+.log{background:var(--g900);border-radius:var(--r);padding:11px 13px;font-family:'Courier New',monospace;font-size:11px;color:#A5F3FC;max-height:170px;overflow-y:auto;line-height:1.9}
+.ll.ls{color:#6EE7B7}.ll.lw{color:#FDE68A}.ll.le{color:#FCA5A5}
+
+/* ── Charts ──────────────────────────────────────────────────── */
+.cb{position:relative;width:100%;height:195px}
+
+/* ── Dataset info box ────────────────────────────────────────── */
+.info-box{background:var(--b50);border:1.5px solid var(--b200);border-radius:var(--r);padding:14px 16px;font-size:12.5px;color:var(--b800);line-height:1.8}
+.info-box strong{color:var(--b700)}
+.info-box code{background:var(--b100);padding:1px 6px;border-radius:4px;font-size:11px;color:var(--b900)}
+
+/* ── Plots ───────────────────────────────────────────────────── */
+.plot-img{width:100%;border-radius:var(--r);border:1.5px solid var(--b100)}
+.plot-empty{text-align:center;padding:38px;color:var(--g400);font-size:12px}
+
+/* ── Spinner ─────────────────────────────────────────────────── */
+.sp{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;animation:spin .7s linear infinite;display:inline-block}
+.spb{border-color:rgba(29,78,216,.2);border-top-color:var(--b700)}
+@keyframes spin{to{transform:rotate(360deg)}}
+code{background:var(--g100);padding:1px 6px;border-radius:4px;font-size:11px}
+
+/* ── Metric pill row ─────────────────────────────────────────── */
+.mpill{display:inline-flex;flex-direction:column;align-items:center;background:var(--b50);border:1.5px solid var(--b100);border-radius:var(--r);padding:9px 18px;text-align:center;gap:2px}
+.mpill-v{font-family:var(--fh);font-size:20px;font-weight:700;color:var(--b700)}
+.mpill-l{font-size:9px;text-transform:uppercase;letter-spacing:.7px;color:var(--g400)}
+
+@media(max-width:880px){.shell{grid-template-columns:1fr}.side{display:none}.kg,.g2,.g3,.g4{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- ══ TOPBAR ══════════════════════════════════════════════════ -->
+<header class="top">
+  <div class="brand">
+    <div class="bico">
+      <svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+    </div>
+    <div>
+      <div class="bname">PneumoAI — Chest X-Ray Analyser</div>
+      <div class="bsub">ResNet50 Transfer Learning · Grad-CAM · Binary Classification</div>
+    </div>
+  </div>
+  <div class="spill">
+    <div class="sdot" id="gsDot"></div>
+    <span id="gsText">Initialising…</span>
+  </div>
+</header>
+
+<!-- ══ SIDEBAR ═════════════════════════════════════════════════ -->
+<nav class="side">
+  <div class="nlbl">Navigation</div>
+  <button class="ni active" onclick="nav('overview',this)">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>Overview
+  </button>
+  <button class="ni" onclick="nav('dataset',this)">
+    <svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>Dataset
+  </button>
+  <button class="ni" onclick="nav('training',this)">
+    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Training
+  </button>
+  <button class="ni" onclick="nav('predict',this)">
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Predict
+  </button>
+  <button class="ni" onclick="nav('evaluation',this)">
+    <svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Evaluation
+  </button>
+  <button class="ni" onclick="nav('architecture',this)">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>Architecture
+  </button>
+
+  <div style="flex:1"></div>
+
+  <div class="nlbl">Dataset Status</div>
+  <div class="dataset-status">
+    <div class="ds-title">dataset splits</div>
+    <div id="sideDatasetInfo">
+      <div class="ds-row"><span>train/</span><span class="ds-badge ds-missing" id="sdTrain">checking…</span></div>
+      <div class="ds-row"><span>val/</span><span class="ds-badge ds-missing" id="sdVal">checking…</span></div>
+      <div class="ds-row"><span>test/</span><span class="ds-badge ds-missing" id="sdTest">checking…</span></div>
+    </div>
+  </div>
+
+  <div style="padding:8px 10px;font-size:10.5px;color:var(--g400);line-height:1.9;margin-top:4px">
+    ResNet50 · Binary XEnt<br>CLAHE preprocessing<br>Grad-CAM · Sensitivity/Specificity
+  </div>
+</nav>
+
+<!-- ══ MAIN ════════════════════════════════════════════════════ -->
+<main class="main">
+
+<!-- ═══ OVERVIEW ═══════════════════════════════════════════════ -->
+<div class="page active" id="page-overview">
+  <div class="ph">
+    <div><div class="ptitle">System Overview</div><div class="pdesc">Binary pneumonia detection — NORMAL vs PNEUMONIA from chest X-rays</div></div>
+    <button class="btn bo bsm" onclick="refreshStatus()">
+      <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Refresh
+    </button>
+  </div>
+
+  <div class="kg">
+    <div class="kc"><div class="kl">Model</div><div class="kv" id="kModel" style="font-size:15px;margin-top:5px">—</div><div class="bdg bb" id="kBadge">Not loaded</div></div>
+    <div class="kc"><div class="kl">Accuracy</div><div class="kv" id="kAcc">—</div><div class="ks">test set</div></div>
+    <div class="kc"><div class="kl">Sensitivity</div><div class="kv" id="kSens">—</div><div class="ks">pneumonia recall</div></div>
+    <div class="kc"><div class="kl">Specificity</div><div class="kv" id="kSpec">—</div><div class="ks">normal recall</div></div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="ctitle"><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>Quick Start</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn bp" onclick="nav('dataset',document.querySelector('[onclick*=dataset]'))"><svg viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/></svg>1 — Verify Dataset</button>
+        <button class="btn bo" onclick="nav('training',document.querySelector('[onclick*=training]'))"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>2 — Train Model</button>
+        <button class="btn bo" onclick="nav('predict',document.querySelector('[onclick*=predict]'))"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>3 — Predict X-Ray</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ctitle"><svg viewBox="0 0 24 24"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>System Log</div>
+      <div class="log" id="sysLog"><div class="ll">&gt; PneumoAI server started</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ctitle">AI Pipeline</div>
+    <div id="pipeViz" style="display:flex;align-items:center;overflow-x:auto;gap:0;padding:4px 0"></div>
+  </div>
+</div>
+
+<!-- ═══ DATASET ════════════════════════════════════════════════ -->
+<div class="page" id="page-dataset">
+  <div class="ph">
+    <div><div class="ptitle">Dataset Setup</div><div class="pdesc">Kaggle: chest-xray-pneumonia — NORMAL vs PNEUMONIA</div></div>
+  </div>
+
+  <div class="info-box">
+    <strong>Expected folder structure after downloading from Kaggle:</strong><br>
+    <code>AI-Medical-Image-Analysis/</code><br>
+    <code>&nbsp;&nbsp;data/raw/</code><br>
+    <code>&nbsp;&nbsp;&nbsp;&nbsp;train/NORMAL/ &nbsp;&nbsp; train/PNEUMONIA/</code><br>
+    <code>&nbsp;&nbsp;&nbsp;&nbsp;val/NORMAL/ &nbsp;&nbsp;&nbsp;&nbsp; val/PNEUMONIA/</code><br>
+    <code>&nbsp;&nbsp;&nbsp;&nbsp;test/NORMAL/ &nbsp;&nbsp;&nbsp; test/PNEUMONIA/</code>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="ctitle">Kaggle Download Instructions</div>
+      <div style="font-size:12.5px;color:var(--g500);line-height:2">
+        <strong style="color:var(--b800)">Option A — Kaggle CLI (fastest)</strong><br>
+        <code>pip install kaggle</code><br>
+        <code>kaggle datasets download -d paultimothymooney/chest-xray-pneumonia</code><br>
+        <code>unzip chest-xray-pneumonia.zip -d data/</code><br>
+        <code>Move the extracted chest_xray folders into data/raw/</code><br><br>
+        <strong style="color:var(--b800)">Option B — Manual</strong><br>
+        Go to <code>kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia</code><br>
+        → Download → unzip → place at <code>data/raw/</code>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle">Live Dataset Status</div>
+      <div id="datasetTable">
+        <div style="text-align:center;padding:20px;color:var(--g400);font-size:12px">Click Refresh to check</div>
+      </div>
+      <button class="btn bp" style="margin-top:12px;width:100%" onclick="refreshStatus()">
+        <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Check Dataset
+      </button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Dataset Statistics</div>
+    <div id="datasetStats" style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="color:var(--g400);font-size:12px;padding:20px">Run Check Dataset to see statistics</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TRAINING ═══════════════════════════════════════════════ -->
+<div class="page" id="page-training">
+  <div class="ph">
+    <div><div class="ptitle">Model Training</div><div class="pdesc">ResNet50 two-phase transfer learning — binary cross-entropy</div></div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="ctitle">Training Configuration</div>
+      <div class="fr">
+        <div class="fg">
+          <label class="fl">Phase 1 Epochs (head only)</label>
+          <input class="fi" type="number" id="ep1" value="10" min="3" max="50"/>
+          <span class="fh">Frozen ResNet50 base — fast</span>
+        </div>
+        <div class="fg">
+          <label class="fl">Phase 2 Epochs (fine-tune)</label>
+          <input class="fi" type="number" id="ep2" value="8" min="3" max="30"/>
+          <span class="fh">Top-30 ResNet layers unfrozen</span>
+        </div>
+      </div>
+      <div class="fg">
+        <label class="fl">Architecture</label>
+        <input class="fi" value="ResNet50 → GAP → BN → Dense512 → Dense256 → Sigmoid" readonly style="color:var(--g500);font-size:12px"/>
+      </div>
+      <div class="fg">
+        <label class="fl">Loss / Optimiser</label>
+        <input class="fi" value="Binary Crossentropy · Adam (1e-4 → 1e-5)" readonly style="color:var(--g500);font-size:12px"/>
+      </div>
+      <div style="display:flex;gap:9px;align-items:center">
+        <button class="btn bp" id="btnTrain" onclick="startTraining()">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start Training
+        </button>
+        <button class="btn bo bsm" id="btnSeeRes" style="display:none" onclick="nav('evaluation',document.querySelector('[onclick*=evaluation]'))">View Results →</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="ctitle"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Live Accuracy</div>
+      <div class="cb"><canvas id="accChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="g2">
+    <div class="card">
+      <div class="ctitle"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Live AUC</div>
+      <div class="cb"><canvas id="aucChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="ctitle">Precision / Recall (Pneumonia class)</div>
+      <div class="cb"><canvas id="prChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Training Log</div>
+    <div class="log" id="trainLog"><div class="ll">&gt; Waiting for training to start…</div></div>
+    <div style="margin-top:11px">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--g400);margin-bottom:5px">
+        <span>Overall Progress</span><span id="epLbl">0 / 0 epochs</span>
+      </div>
+      <div class="pw"><div class="pf" id="tProg"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Per-Epoch Metrics</div>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Epoch</th><th>Train Acc</th><th>Val Acc</th><th>AUC</th><th>Val AUC</th><th>Precision</th><th>Recall</th><th>Loss</th></tr></thead>
+        <tbody id="epRows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PREDICT ════════════════════════════════════════════════ -->
+<div class="page" id="page-predict">
+  <div class="ph">
+    <div><div class="ptitle">Predict X-Ray</div><div class="pdesc">Upload a chest X-ray → NORMAL or PNEUMONIA + Grad-CAM attention map</div></div>
+  </div>
+
+  <div class="card">
+    <div class="ctitle">Upload Chest X-Ray</div>
+    <div class="upz" id="upZone">
+      <input type="file" id="fileInp" accept="image/*" onchange="onFile(event)"/>
+      <div class="upico"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></div>
+      <div class="upt">Drop chest X-ray here or click to browse</div>
+      <div class="ups">JPEG · PNG · TIFF — up to 16 MB · Grayscale or RGB</div>
+    </div>
+    <div id="prevBox" style="margin-top:12px;display:none">
+      <img id="prevImg" style="max-height:150px;border-radius:var(--r);border:1.5px solid var(--b100)" alt="preview"/>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn bp" id="btnPred" onclick="runPred()">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Analyse X-Ray
+        </button>
+        <button class="btn bo bsm" onclick="clearPred()">Clear</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="rp" id="resPanel">
+    <div class="rimgs">
+      <div class="rbox"><img id="resOrig" alt="original"/><div class="rlbl">Original X-Ray</div></div>
+      <div class="rbox"><img id="resCam"  alt="gradcam"/><div class="rlbl">Grad-CAM Heatmap</div></div>
+    </div>
+    <div class="rinfo">
+      <div>
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--g400);margin-bottom:3px">AI Diagnosis</div>
+        <div class="rcls" id="resCls">—</div>
+        <div style="font-size:11px;color:var(--g400);margin-top:2px" id="resRaw">—</div>
+      </div>
+      <div>
+        <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:5px;color:var(--g500)"><span>Confidence</span><span id="resConf">—</span></div>
+        <div class="cbar"><div class="cfill" id="confF"></div></div>
+      </div>
+      <div>
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--g400);margin-bottom:7px">Class Probabilities</div>
+        <div id="probB"></div>
+      </div>
+      <div class="risk" id="riskB">—</div>
+      <div>
+        <div style="font-size:9.5px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--g400);margin-bottom:6px">Radiological Findings</div>
+        <ul class="findings-list" id="findingsList"></ul>
+      </div>
+      <div style="font-size:11.5px;color:var(--g500);line-height:1.75;padding:9px 12px;background:var(--b50);border-radius:var(--r);border:1px solid var(--b100)" id="recT">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ EVALUATION ═════════════════════════════════════════════ -->
+<div class="page" id="page-evaluation">
+  <div class="ph">
+    <div><div class="ptitle">Model Evaluation</div><div class="pdesc">Test-set metrics · confusion matrix · ROC curve · training history</div></div>
+    <button class="btn bo bsm" onclick="loadPlots()">
+      <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>Reload
+    </button>
+  </div>
+
+  <div class="kg">
+    <div class="kc"><div class="kl">Accuracy</div><div class="kv" id="eAcc">—</div><div class="ks">test set</div></div>
+    <div class="kc"><div class="kl">AUC-ROC</div><div class="kv" id="eAUC">—</div><div class="ks">binary</div></div>
+    <div class="kc"><div class="kl">Sensitivity</div><div class="kv" id="eSens">—</div><div class="ks">pneumonia recall</div></div>
+    <div class="kc"><div class="kl">Specificity</div><div class="kv" id="eSpec">—</div><div class="ks">normal recall</div></div>
+  </div>
+
+  <div class="g2">
+    <div class="card"><div class="ctitle">Confusion Matrix</div><img id="pCM" class="plot-img" style="display:none"/><div class="plot-empty" id="pCMe">Train model first</div></div>
+    <div class="card"><div class="ctitle">ROC Curve</div><img id="pROC" class="plot-img" style="display:none"/><div class="plot-empty" id="pROCe">Train model first</div></div>
+  </div>
+  <div class="card"><div class="ctitle">Training History — Accuracy · AUC · Loss</div><img id="pHist" class="plot-img" style="display:none"/><div class="plot-empty" id="pHiste">Train model first</div></div>
+</div>
+
+<!-- ═══ ARCHITECTURE ═══════════════════════════════════════════ -->
+<div class="page" id="page-architecture">
+  <div class="ph">
+    <div><div class="ptitle">System Architecture</div><div class="pdesc">From raw chest X-ray to binary pneumonia diagnosis</div></div>
+  </div>
+  <div class="card">
+    <div class="ctitle">Model Pipeline</div>
+    <div id="archDiag" style="overflow-x:auto;padding:6px 0"></div>
+  </div>
+  <div class="g3">
+    <div class="card"><div class="ctitle">Input & Preprocessing</div><ul style="font-size:12px;color:var(--g500);line-height:2.1;padding-left:14px"><li>Chest X-ray (JPEG/PNG)</li><li>Grayscale → 3-channel RGB</li><li>CLAHE contrast enhancement</li><li>Resize → 224 × 224</li><li>ImageNet normalisation</li><li>Augmentation (train only)</li></ul></div>
+    <div class="card"><div class="ctitle">ResNet50 Base</div><ul style="font-size:12px;color:var(--g500);line-height:2.1;padding-left:14px"><li>50-layer residual network</li><li>ImageNet pretrained weights</li><li>Phase 1: base fully frozen</li><li>Phase 2: top-30 unfrozen</li><li>Learning rate 1e-4 → 1e-5</li></ul></div>
+    <div class="card"><div class="ctitle">Classification Head</div><ul style="font-size:12px;color:var(--g500);line-height:2.1;padding-left:14px"><li>GlobalAveragePooling2D</li><li>BatchNormalization</li><li>Dense 512 + Dropout 0.4</li><li>Dense 256 + Dropout 0.3</li><li>Dense 1 → Sigmoid output</li><li>Threshold: 0.5</li></ul></div>
+    <div class="card"><div class="ctitle">Training Strategy</div><ul style="font-size:12px;color:var(--g500);line-height:2.1;padding-left:14px"><li>Binary cross-entropy loss</li><li>Adam optimiser</li><li>ReduceLROnPlateau</li><li>EarlyStopping (val_AUC)</li><li>ModelCheckpoint (best AUC)</li></ul></div>
+    <div class="card"><div class="ctitle">Grad-CAM XAI</div><ul style="font-size:12px;color:var(--g500);line-height:2.1;padding-left:14px"><li>conv5_block3_out activations</li><li>Gradient w.r.t. sigmoid output</li><li>JET colourmap overlay</li><li>Highlights infiltrate regions</li></ul></div>
+    <div class="card"><div class="ctitle">Clinical Output</div><ul style="font-size:12px;color:var(--g500);line-height:2.1;padding-left:14px"><li>NORMAL / PNEUMONIA label</li><li>Confidence score (%)</li><li>Risk: Low / Moderate / High</li><li>Radiological findings list</li><li>Clinical recommendation</li><li>Grad-CAM report image</li></ul></div>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+const socket = io();
+let accC, aucC, prC, totalEp=0, doneEp=0, selFile=null;
+
+/* ── Socket ─────────────────────────────────────────────────── */
+socket.on("connect",      () => slog("Connected to PneumoAI server","ls"));
+socket.on("server_ready", d  => { if(d.trained) setSt("ready"); refreshStatus(); });
+
+socket.on("epoch_metric", d => {
+  doneEp = d.epoch;
+  updCharts(d); appendRow(d); updProg();
+  tlog(`Ep ${d.epoch} | Acc ${d.accuracy}% | Val ${d.val_accuracy}% | AUC ${d.auc}% | Prec ${d.precision}% | Rec ${d.recall}%`);
+});
+
+socket.on("training_complete", m => {
+  tlog("Training complete!","ls");
+  tlog(`Acc: ${m.accuracy}% | Sens: ${m.sensitivity}% | Spec: ${m.specificity}% | AUC: ${m.roc_auc}%`,"ls");
+  slog("Training complete — model saved","ls");
+  setSt("ready");
+  document.getElementById("btnTrain").disabled=false;
+  document.getElementById("btnTrain").innerHTML=svgPlay()+" Retrain";
+  document.getElementById("btnSeeRes").style.display="flex";
+  document.getElementById("tProg").style.width="100%";
+  setKpis(m); refreshStatus(); loadPlots();
+});
+
+socket.on("training_error", d => {
+  tlog("ERROR: "+d.error,"le"); slog("Training error — check console","le");
+  document.getElementById("btnTrain").disabled=false; setSt("idle");
+});
+
+/* ── Nav ────────────────────────────────────────────────────── */
+function nav(id,el){
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll(".ni").forEach(n=>n.classList.remove("active"));
+  document.getElementById("page-"+id).classList.add("active");
+  if(el) el.classList.add("active");
+  if(id==="evaluation") loadPlots();
+  if(id==="architecture") renderArch();
+  if(id==="overview") renderPipe();
+}
+
+/* ── Status ─────────────────────────────────────────────────── */
+function setSt(s){
+  const dot=document.getElementById("gsDot"), txt=document.getElementById("gsText");
+  dot.className="sdot";
+  if(s==="ready"){ dot.classList.add("ready"); txt.textContent="Model Ready"; }
+  else if(s==="training"){ dot.classList.add("training"); txt.textContent="Training…"; }
+  else txt.textContent="Idle";
+}
+
+async function refreshStatus(){
+  const r = await fetch("/api/status").then(r=>r.json());
+
+  // ── Sidebar split indicators ──────────────────────────────
+  const splits = r.dataset_splits || {};
+  ["train","val","test"].forEach(s=>{
+    const el=document.getElementById("sd"+s.charAt(0).toUpperCase()+s.slice(1));
+    if(!el) return;
+    const data=splits[s];
+    if(data && (data.NORMAL||0)+(data.PNEUMONIA||0)>0){
+      el.textContent="✓ found"; el.className="ds-badge ds-found";
+    } else { el.textContent="missing"; el.className="ds-badge ds-missing"; }
+  });
+
+  // ── Dataset table ─────────────────────────────────────────
+  if(Object.keys(splits).length>0){
+    let html=`<div class="tw"><table><thead><tr><th>Split</th><th>NORMAL</th><th>PNEUMONIA</th><th>Total</th></tr></thead><tbody>`;
+    for(const [sp,cnt] of Object.entries(splits)){
+      const n=cnt.NORMAL||0, p=cnt.PNEUMONIA||0;
+      html+=`<tr><td style="font-weight:600;color:var(--b700)">${sp}/</td><td>${n.toLocaleString()}</td><td>${p.toLocaleString()}</td><td>${(n+p).toLocaleString()}</td></tr>`;
+    }
+    html+=`</tbody></table></div>`;
+    document.getElementById("datasetTable").innerHTML=html;
+
+    // stats pills
+    let pills="";
+    for(const [sp,cnt] of Object.entries(splits)){
+      const n=cnt.NORMAL||0, p=cnt.PNEUMONIA||0;
+      pills+=`<div class="mpill"><span class="mpill-v">${(n+p).toLocaleString()}</span><span class="mpill-l">${sp}</span></div>`;
+    }
+    document.getElementById("datasetStats").innerHTML=pills;
+  }
+
+  // ── Model ─────────────────────────────────────────────────
+  if(r.training){ setSt("training"); return; }
+  if(r.model_loaded){
+    setSt("ready");
+    document.getElementById("kModel").textContent="ResNet50";
+    document.getElementById("kBadge").textContent="Trained ✓";
+    document.getElementById("kBadge").className="bdg bg";
+  } else { setSt("idle"); document.getElementById("kModel").textContent="Not trained"; }
+
+  // Load eval metrics if model is trained
+  if(r.model_loaded){
+    const em=await fetch("/api/eval_metrics").then(r=>r.json());
+    if(em && em.accuracy) applyEvalMetrics(em);
+  }
+}
+
+function applyEvalMetrics(em){
+  // em is sklearn classification_report + our extras
+  const cls = em["PNEUMONIA"] || {};
+  const acc  = em.accuracy ? em.accuracy.toFixed(1)+"%" : "—";
+  document.getElementById("kAcc").textContent  = acc;
+  document.getElementById("eAcc").textContent  = acc;
+  document.getElementById("kSens").textContent = em.sensitivity ? em.sensitivity.toFixed(1)+"%" : "—";
+  document.getElementById("kSpec").textContent = em.specificity ? em.specificity.toFixed(1)+"%" : "—";
+  document.getElementById("eAUC").textContent  = em.roc_auc ? em.roc_auc.toFixed(1)+"%" : "—";
+  document.getElementById("eSens").textContent = em.sensitivity ? em.sensitivity.toFixed(1)+"%" : "—";
+  document.getElementById("eSpec").textContent = em.specificity ? em.specificity.toFixed(1)+"%" : "—";
+}
+
+/* ── Logging ────────────────────────────────────────────────── */
+function slog(msg,cls=""){_log("sysLog",msg,cls);}
+function tlog(msg,cls=""){_log("trainLog",msg,cls);}
+function _log(id,msg,cls){
+  const b=document.getElementById(id);
+  const d=document.createElement("div");
+  d.className="ll "+(cls||"");
+  d.textContent="> "+msg;
+  b.appendChild(d);
+  while(b.children.length>100)b.removeChild(b.firstChild);
+  b.scrollTop=b.scrollHeight;
+}
+
+/* ── Training ───────────────────────────────────────────────── */
+async function startTraining(){
+  const e1=+document.getElementById("ep1").value, e2=+document.getElementById("ep2").value;
+  totalEp=e1+e2; doneEp=0;
+  document.getElementById("btnTrain").disabled=true;
+  document.getElementById("btnTrain").innerHTML=`<span class="sp"></span> Training…`;
+  document.getElementById("epRows").innerHTML="";
+  document.getElementById("epLbl").textContent=`0 / ${totalEp} epochs`;
+  document.getElementById("tProg").style.width="0%";
+  setSt("training");
+  slog("Training started — Phase1:"+e1+" epochs · Phase2:"+e2+" epochs");
+  tlog("Loading dataset from data/raw/ ...");
+  initCharts();
+  const r=await fetch("/api/train",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({epochs_phase1:e1,epochs_phase2:e2})}).then(r=>r.json());
+  if(r.error || !r.started){
+    slog((r.error || r.message || "Training did not start"),"le");
+    document.getElementById("btnTrain").disabled=false;
+    document.getElementById("btnTrain").innerHTML=svgPlay()+" Retrain";
+    setSt("idle");
+  }
+}
+
+function updProg(){
+  const p=Math.round(doneEp/totalEp*100);
+  document.getElementById("tProg").style.width=p+"%";
+  document.getElementById("epLbl").textContent=`${doneEp} / ${totalEp} epochs`;
+}
+
+function setKpis(m){
+  const fmt=v=>typeof v==="number" ? v.toFixed(1)+"%" : "—";
+  document.getElementById("kAcc").textContent   = fmt(m.accuracy);
+  document.getElementById("kSens").textContent  = fmt(m.sensitivity);
+  document.getElementById("kSpec").textContent  = fmt(m.specificity);
+  document.getElementById("eAcc").textContent   = fmt(m.accuracy);
+  document.getElementById("eAUC").textContent   = fmt(m.roc_auc);
+  document.getElementById("eSens").textContent  = fmt(m.sensitivity);
+  document.getElementById("eSpec").textContent  = fmt(m.specificity);
+}
+
+/* ── Charts ─────────────────────────────────────────────────── */
+function mkChart(id,ds){
+  return new Chart(document.getElementById(id),{
+    type:"line",
+    data:{labels:[],datasets:ds},
+    options:{
+      animation:{duration:200},responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{position:"top",labels:{font:{size:10},usePointStyle:true}}},
+      scales:{
+        x:{grid:{color:"#EFF6FF"},ticks:{font:{size:9}}},
+        y:{grid:{color:"#EFF6FF"},ticks:{font:{size:9}},min:0,max:100},
+      },
+    },
+  });
+}
+
+function initCharts(){
+  if(accC)accC.destroy(); if(aucC)aucC.destroy(); if(prC)prC.destroy();
+  accC=mkChart("accChart",[
+    {label:"Train Acc %",data:[],borderColor:"#1D4ED8",backgroundColor:"rgba(29,78,216,.06)",tension:.4,pointRadius:2,fill:true},
+    {label:"Val Acc %",data:[],borderColor:"#059669",backgroundColor:"rgba(5,150,105,.06)",tension:.4,pointRadius:2,fill:true},
+  ]);
+  aucC=mkChart("aucChart",[
+    {label:"Train AUC %",data:[],borderColor:"#7C3AED",backgroundColor:"rgba(124,58,237,.06)",tension:.4,pointRadius:2,fill:true},
+    {label:"Val AUC %",data:[],borderColor:"#D97706",backgroundColor:"rgba(217,119,6,.06)",tension:.4,pointRadius:2,fill:true},
+  ]);
+  prC=mkChart("prChart",[
+    {label:"Precision %",data:[],borderColor:"#DC2626",backgroundColor:"rgba(220,38,38,.06)",tension:.4,pointRadius:2,fill:true},
+    {label:"Recall %",data:[],borderColor:"#0891B2",backgroundColor:"rgba(8,145,178,.06)",tension:.4,pointRadius:2,fill:true},
+  ]);
+}
+
+function updCharts(d){
+  if(!accC)return;
+  const push=(c,lbl,v1,v2)=>{ c.data.labels.push(lbl); c.data.datasets[0].data.push(v1); c.data.datasets[1].data.push(v2); c.update(); };
+  push(accC,d.epoch,d.accuracy,d.val_accuracy);
+  push(aucC,d.epoch,d.auc,d.val_auc);
+  push(prC,d.epoch,d.precision,d.recall);
+}
+
+function appendRow(d){
+  const tb=document.getElementById("epRows");
+  const tr=document.createElement("tr");
+  tr.innerHTML=`<td style="font-weight:600;color:var(--b700)">${d.epoch}</td><td>${d.accuracy}%</td><td>${d.val_accuracy}%</td><td>${d.auc}%</td><td>${d.val_auc}%</td><td>${d.precision}%</td><td>${d.recall}%</td><td>${d.loss}</td>`;
+  tb.appendChild(tr);
+  tr.scrollIntoView({behavior:"smooth",block:"nearest"});
+}
+
+/* ── Prediction ─────────────────────────────────────────────── */
+function onFile(e){
+  selFile=e.target.files[0]; if(!selFile)return;
+  document.getElementById("prevImg").src=URL.createObjectURL(selFile);
+  document.getElementById("prevBox").style.display="block";
+  document.getElementById("resPanel").classList.remove("show");
+  document.getElementById("upZone").style.borderColor="var(--b600)";
+}
+
+function clearPred(){
+  selFile=null; document.getElementById("fileInp").value="";
+  document.getElementById("prevBox").style.display="none";
+  document.getElementById("resPanel").classList.remove("show");
+  document.getElementById("upZone").style.borderColor="";
+}
+
+async function runPred(){
+  if(!selFile)return;
+  const btn=document.getElementById("btnPred");
+  btn.disabled=true;
+  btn.innerHTML=`<span class="sp spb"></span> Analysing…`;
+  const fd=new FormData(); fd.append("file",selFile);
+  const r=await fetch("/api/predict",{method:"POST",body:fd}).then(r=>r.json());
+  btn.disabled=false;
+  btn.innerHTML=`<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>Analyse X-Ray`;
+  if(r.error){ slog("Error: "+r.error,"le"); alert("Error: "+r.error); return; }
+  showResult(r);
+  slog(`Prediction: ${r.label} (${r.confidence}%) — Risk: ${r.risk_level}`,"ls");
+}
+
+function showResult(r){
+  document.getElementById("resOrig").src ="data:image/png;base64,"+r.original_b64;
+  document.getElementById("resCam").src  ="data:image/png;base64,"+r.gradcam_b64;
+
+  const cls=document.getElementById("resCls");
+  cls.textContent=r.label;
+  cls.className="rcls "+(r.label==="NORMAL"?"normal":"pneumonia");
+
+  document.getElementById("resRaw").textContent=
+    `Raw sigmoid score: ${r.raw_score} (threshold 0.5)`;
+  document.getElementById("resConf").textContent=r.confidence+"%";
+  document.getElementById("confF").style.width=r.confidence+"%";
+  document.getElementById("confF").style.background=
+    r.label==="NORMAL"?"var(--green)":"var(--red)";
+
+  // Prob bars
+  const pb=document.getElementById("probB"); pb.innerHTML="";
+  for(const [cls2,prob] of Object.entries(r.probabilities)){
+    const col=cls2==="NORMAL"?"var(--green)":"var(--red)";
+    pb.innerHTML+=`<div class="prow">
+      <span style="min-width:95px;font-size:11.5px">${cls2}</span>
+      <div class="pt"><div class="ptf" style="width:${prob}%;background:${col}"></div></div>
+      <span style="min-width:42px;text-align:right;font-size:11.5px;font-weight:600">${prob}%</span>
+    </div>`;
+  }
+
+  // Risk
+  const rb=document.getElementById("riskB");
+  rb.className="risk risk-"+(r.risk_level||"Low");
+  rb.textContent="⚕  Risk Level: "+r.risk_level;
+
+  // Findings
+  const fl=document.getElementById("findingsList"); fl.innerHTML="";
+  (r.findings||[]).forEach(f=>{
+    const li=document.createElement("li"); li.textContent=f; fl.appendChild(li);
+  });
+
+  document.getElementById("recT").textContent=r.recommendation;
+  document.getElementById("resPanel").classList.add("show");
+}
+
+/* ── Eval Plots ─────────────────────────────────────────────── */
+async function loadPlots(){
+  const p=await fetch("/api/eval_plots").then(r=>r.json());
+  plt("pCM","pCMe",p["confusion_matrix.png"]);
+  plt("pROC","pROCe",p["roc_curves.png"]);
+  plt("pHist","pHiste",p["training_curves.png"]);
+
+  const em=await fetch("/api/eval_metrics").then(r=>r.json());
+  if(em && em.accuracy) setKpis(em);
+}
+function plt(imgId,emId,b64){
+  if(b64){ document.getElementById(imgId).src="data:image/png;base64,"+b64; document.getElementById(imgId).style.display="block"; document.getElementById(emId).style.display="none"; }
+  else { document.getElementById(imgId).style.display="none"; document.getElementById(emId).style.display="block"; }
+}
+
+/* ── Pipeline Viz ────────────────────────────────────────────── */
+function renderPipe(){
+  const steps=[
+    {e:"🫁",l:"X-Ray Input",c:"#EFF6FF",b:"#BFDBFE"},
+    {e:"⚙️",l:"CLAHE",c:"#F0FDF4",b:"#BBF7D0"},
+    {e:"🧠",l:"ResNet50",c:"#EDE9FE",b:"#C4B5FD"},
+    {e:"🎯",l:"Sigmoid",c:"#FEF3C7",b:"#FDE68A"},
+    {e:"🔥",l:"Grad-CAM",c:"#FFF7ED",b:"#FED7AA"},
+    {e:"📋",l:"Report",c:"#F0FDF4",b:"#86EFAC"},
+  ];
+  document.getElementById("pipeViz").innerHTML=steps.map((s,i)=>
+    `<div style="display:flex;align-items:center">
+      <div style="background:${s.c};border:1.5px solid ${s.b};border-radius:11px;padding:9px 11px;text-align:center;min-width:74px;flex-shrink:0">
+        <div style="font-size:19px;margin-bottom:2px">${s.e}</div>
+        <div style="font-size:9.5px;font-weight:600;color:var(--b800)">${s.l}</div>
+      </div>
+      ${i<steps.length-1?`<div style="font-size:15px;color:var(--b300);padding:0 4px">→</div>`:""}
+    </div>`).join("");
+}
+
+/* ── Architecture ────────────────────────────────────────────── */
+function renderArch(){
+  const layers=[
+    {l:"Chest X-Ray Input (224 × 224 × 3)",c:"#DBEAFE",t:"#1E40AF"},
+    {l:"CLAHE Enhancement · Grayscale → RGB · Normalisation",c:"#D1FAE5",t:"#065F46"},
+    {l:"ResNet50 Base  ──  Phase 1 frozen  ·  Phase 2 top-30 unfrozen",c:"#EDE9FE",t:"#5B21B6"},
+    {l:"GlobalAveragePooling2D",c:"#DBEAFE",t:"#1E40AF"},
+    {l:"Dense 512 · BatchNorm · Dropout 0.4",c:"#FEF3C7",t:"#92400E"},
+    {l:"Dense 256 · Dropout 0.3",c:"#FEF3C7",t:"#92400E"},
+    {l:"Dense 1 → Sigmoid  (≥0.5 = PNEUMONIA, <0.5 = NORMAL)",c:"#D1FAE5",t:"#065F46"},
+    {l:"Grad-CAM Heatmap  +  Risk Level  +  Clinical Report",c:"#FFE4E6",t:"#9F1239"},
+  ];
+  document.getElementById("archDiag").innerHTML=
+    `<div style="display:flex;flex-direction:column;align-items:center;gap:0">`+
+    layers.map((l,i)=>`
+      <div style="background:${l.c};border:1.5px solid ${l.c};border-radius:9px;padding:8px 32px;color:${l.t};font-weight:600;font-size:12px;width:min(460px,100%);text-align:center">${l.l}</div>
+      ${i<layers.length-1?`<div style="width:2px;height:13px;background:var(--b300)"></div>`:""}`).join("")+`</div>`;
+}
+
+/* ── Drag & Drop ─────────────────────────────────────────────── */
+const uz=document.getElementById("upZone");
+uz.addEventListener("dragover",e=>{e.preventDefault();uz.classList.add("drag")});
+uz.addEventListener("dragleave",()=>uz.classList.remove("drag"));
+uz.addEventListener("drop",e=>{
+  e.preventDefault();uz.classList.remove("drag");
+  const f=e.dataTransfer.files[0];
+  if(f){selFile=f;document.getElementById("prevImg").src=URL.createObjectURL(f);document.getElementById("prevBox").style.display="block";}
+});
+
+/* ── Helpers ─────────────────────────────────────────────────── */
+function svgPlay(){return`<svg viewBox="0 0 24 24" stroke="currentColor" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;}
+
+/* ── Init ────────────────────────────────────────────────────── */
+refreshStatus();
+renderPipe();
+setTimeout(loadPlots,800);
+</script>
+</body>
+</html>

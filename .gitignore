@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+dist/
+build/
+.env
+venv/
+env/
+
+# Data (large — use Git LFS or exclude)
+data/raw/
+data/uploads/
+
+# Models (binary — upload to Releases)
+models/saved/*.h5
+models/saved/*.keras
+
+# Outputs (regenerate)
+outputs/predictions/
+outputs/reports/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

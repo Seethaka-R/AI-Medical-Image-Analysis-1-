@@ -203,13 +203,10 @@ Add your screenshots to `docs/screenshots/` and keep the names below for automat
 ![Training Dashboard](outputs/prj_trained_result.png)
 ![Training Dashboard](outputs/prj_.pngrained_result1.png)
 
-### Prediction Page
-
-![Prediction Page](docs/screenshots/prediction-page.png)
-
 ### Pneumonia Prediction Result
 
-![Pneumonia Prediction Result](docs/screenshots/pneumonia-result.png)
+![Pneumonia Prediction Result](outputs/normal_prj_result.png)
+![Pneumonia Prediction Result](outputs/prj_redic_result2.png)
 
 ### Evaluation Plots
 
